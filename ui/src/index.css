@@ -1,0 +1,125 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --page: #ffffff;
+  --card: #ffffff;
+  --user-bubble: #f3f4f6;
+  --foreground: #1f2937;
+  --muted: #6b7280;
+  --border: #e5e7eb;
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --ring: #2563eb;
+  --success: #22c55e;
+  --tool-bg: #f9fafb;
+  --tool-border: #e5e7eb;
+  --error-bg: #fef2f2;
+  --error-border: #fecaca;
+  --error-text: #dc2626;
+  --inverse-text: #ffffff;
+  --input-bg: #ffffff;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --page: #0a0a0a;
+    --card: #141414;
+    --user-bubble: #1f1f1f;
+    --foreground: #e5e5e5;
+    --muted: #8b8b8b;
+    --border: #2a2a2a;
+    --primary: #3b82f6;
+    --primary-hover: #2563eb;
+    --ring: #3b82f6;
+    --success: #22c55e;
+    --tool-bg: #141414;
+    --tool-border: #2a2a2a;
+    --error-bg: #1f0a0a;
+    --error-border: #3b1515;
+    --error-text: #f87171;
+    --inverse-text: #0a0a0a;
+    --input-bg: #141414;
+  }
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  body {
+    background-color: var(--page);
+    color: var(--foreground);
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+    font-size: 0.9375rem;
+    line-height: 1.6;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  ::selection {
+    background: var(--primary);
+    color: var(--inverse-text);
+  }
+}
+
+@layer utilities {
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: #d1d5db;
+    border-radius: 3px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: #9ca3af;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    .custom-scrollbar::-webkit-scrollbar-thumb {
+      background: #3a3a3a;
+    }
+    .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+      background: #555555;
+    }
+  }
+
+  @keyframes dotPulse {
+    0%, 80%, 100% { transform: scaleY(0.6); opacity: 0.4; }
+    40% { transform: scaleY(1); opacity: 1; }
+  }
+
+  .typing-dot {
+    display: inline-block;
+    width: 4px;
+    height: 16px;
+    border-radius: 4px;
+    background: var(--primary);
+    animation: dotPulse 1.2s ease-in-out infinite;
+  }
+
+  .typing-dot:nth-child(2) {
+    animation-delay: 0.15s;
+  }
+
+  .typing-dot:nth-child(3) {
+    animation-delay: 0.3s;
+  }
+
+  @keyframes fadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .animate-fade-in {
+    animation: fadeIn 0.2s ease-out forwards;
+  }
+}

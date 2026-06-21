@@ -1,0 +1,5 @@
+packages:
+  - 'backend'
+  - 'ui'
+allowBuilds:
+  esbuild: false
