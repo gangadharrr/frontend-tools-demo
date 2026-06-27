@@ -24,6 +24,7 @@ export interface AssistantMessage {
   content: string;
   thinking?: string;
   timestamp: Date;
+  raw?: string;
 }
 
 export interface ToolCallEntry {

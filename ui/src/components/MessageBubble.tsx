@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { ChevronDown, Brain } from 'lucide-react';
 import type { UserMessage, AssistantMessage } from '../types';
 import { TypingDots } from './TypingDots';
@@ -16,6 +16,8 @@ interface MessageBubbleProps {
 export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
   const isUser = message.kind === 'user';
   const [showThinking, setShowThinking] = useState(false);
+  const userHasToggledRef = useRef(false);
+  const hasThinkingStarted = !isUser && message.thinking !== undefined;
 
   if (isUser) {
     return (
@@ -29,13 +31,18 @@ export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
     );
   }
 
+  const handleOpenChange = (open: boolean) => {
+    userHasToggledRef.current = true;
+    setShowThinking(open);
+  };
+
   return (
     <div className="flex justify-start">
       <div className="max-w-[75%]">
-        {message.thinking && (
+        {hasThinkingStarted && (
           <Collapsible
             open={showThinking}
-            onOpenChange={setShowThinking}
+            onOpenChange={handleOpenChange}
             className="mb-2 rounded-lg border border-[var(--tool-border)] bg-[var(--tool-bg)] overflow-hidden"
           >
             <CollapsibleTrigger className="group flex w-full items-center gap-2 px-3 py-1.5 text-xs text-[var(--muted)] hover:text-[var(--foreground)] transition-colors">
@@ -44,7 +51,11 @@ export function MessageBubble({ message, isStreaming }: MessageBubbleProps) {
               <ChevronDown className="size-3.5 ml-auto transition-transform duration-150 group-data-[state=open]:rotate-180" />
             </CollapsibleTrigger>
             <CollapsibleContent className="border-t border-[var(--tool-border)] px-3 py-2 text-xs text-[var(--muted)] leading-relaxed whitespace-pre-wrap">
-              {message.thinking}
+              {message.thinking ? (
+                message.thinking
+              ) : (
+                <span className="italic opacity-70">Thinking…</span>
+              )}
             </CollapsibleContent>
           </Collapsible>
         )}

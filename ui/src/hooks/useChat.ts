@@ -56,20 +56,27 @@ function parseArgs(raw: string): Record<string, unknown> | null {
   }
 }
 
-function appendAIText(entries: ConversationEntry[], text: string): AssistantMessage {
+function appendAIText(
+  entries: ConversationEntry[],
+  text: string,
+): AssistantMessage {
   const last = entries[entries.length - 1];
   if (last?.kind === 'assistant') {
-    const raw = last.content + text;
+    const prevRaw = last.raw ?? '';
+    const raw = prevRaw + text;
     const { clean, thinking } = extractThinking(raw);
     const updated: AssistantMessage = thinking !== undefined
-      ? { ...last, content: clean, thinking }
-      : { ...last, content: clean };
+      ? { ...last, content: clean, thinking, raw }
+      : { ...last, content: clean, raw };
     entries[entries.length - 1] = updated;
     return updated;
   }
   const raw = text;
   const { clean, thinking } = extractThinking(raw);
-  const msg = assistantMsg(clean);
+  const msg: AssistantMessage = {
+    ...assistantMsg(clean),
+    raw,
+  };
   if (thinking !== undefined) msg.thinking = thinking;
   entries.push(msg);
   return msg;

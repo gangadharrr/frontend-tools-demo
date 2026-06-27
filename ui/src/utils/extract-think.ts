@@ -9,13 +9,20 @@ export function extractThinking(
     return { clean: raw, thinking: undefined };
   }
 
-  const endIdx = raw.indexOf(endTag, startIdx + startTag.length);
+  const contentStart = startIdx + startTag.length;
+  const endIdx = raw.indexOf(endTag, contentStart);
+
   if (endIdx === -1) {
-    return { clean: raw, thinking: undefined };
+    return {
+      clean: raw.slice(0, startIdx),
+      thinking: raw.slice(contentStart),
+    };
   }
 
-  const thinking = raw.slice(startIdx + startTag.length, endIdx);
-  const clean = raw.slice(0, startIdx) + raw.slice(endIdx + endTag.length).replace(/^\n+/, '');
+  const thinking = raw.slice(contentStart, endIdx);
+  const clean =
+    raw.slice(0, startIdx) +
+    raw.slice(endIdx + endTag.length).replace(/^\n+/, '');
 
   return { clean, thinking };
 }
