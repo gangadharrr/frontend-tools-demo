@@ -9,6 +9,7 @@ import {
 import { NO_ANSWER_TEXT, QUESTION_KEY_PREFIX } from './constants';
 import { QuestionForm } from './question-form';
 import { QuestionNavigation } from './question-navigation';
+import { Tabs, TabsList, TabsTrigger } from '../../ui/tabs';
 
 interface InteractiveQuestionUIProps {
   questions: Question[];
@@ -203,7 +204,12 @@ export function InteractiveQuestionUI({
   }
 
   return (
-    <div ref={tabsRootRef} className="flex flex-col gap-2">
+    <Tabs
+      ref={tabsRootRef}
+      value={String(currentQuestion)}
+      onValueChange={value => setCurrentQuestion(Number(value))}
+      className="flex flex-col gap-2"
+    >
       {/* Progress header */}
       <div className="space-y-1.5 px-1">
         <div className="flex items-center justify-between text-xs" style={{ color: 'var(--muted)' }}>
@@ -229,27 +235,19 @@ export function InteractiveQuestionUI({
       </div>
 
       {/* Tab list */}
-      <div
-        className="flex gap-1 overflow-x-auto px-1"
+      <TabsList
+        className="flex w-full gap-1 overflow-x-auto px-1"
         style={{ scrollbarWidth: 'none' }}
       >
         {questions.map((question, idx) => {
           const hasAnswer = completedQuestions.has(idx);
-          const isActive = idx === currentQuestion;
 
           return (
-            <button
+            <TabsTrigger
               key={idx}
-              type="button"
+              value={String(idx)}
               data-tab-index={idx}
-              onClick={() => setCurrentQuestion(idx)}
-              className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-md text-sm shrink-0 transition-colors"
-              style={{
-                backgroundColor: isActive ? 'var(--user-bubble)' : 'transparent',
-                color: isActive ? 'var(--foreground)' : 'var(--muted)',
-                border: '1px solid',
-                borderColor: isActive ? 'var(--border)' : 'transparent',
-              }}
+              className="border border-transparent data-[state=active]:border-[var(--border)]"
             >
               <span
                 className="flex items-center justify-center size-5 rounded-full text-[10px] font-semibold transition-colors"
@@ -265,10 +263,10 @@ export function InteractiveQuestionUI({
                 )}
               </span>
               <span className="max-w-[120px] truncate">{question.header}</span>
-            </button>
+            </TabsTrigger>
           );
         })}
-      </div>
+      </TabsList>
 
       {/* Active question + navigation */}
       <div>
@@ -299,6 +297,6 @@ export function InteractiveQuestionUI({
           );
         })}
       </div>
-    </div>
+    </Tabs>
   );
 }

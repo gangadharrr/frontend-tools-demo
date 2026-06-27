@@ -1,6 +1,8 @@
-import { Loader2, ListChecks } from 'lucide-react';
+import { ListChecks } from 'lucide-react';
 import type { AskUserQuestionInput } from './types';
 import { parseQuestions } from './utils';
+import { Skeleton } from '../../ui/skeleton';
+import { Spinner } from '../../ui/spinner';
 
 interface PreparingQuestionsUIProps {
   /** Partial args that may still be streaming in. */
@@ -26,7 +28,7 @@ export function PreparingQuestionsUI({ args, argsRaw }: PreparingQuestionsUIProp
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--muted)' }}>
-        <Loader2 className="size-3.5 animate-spin" />
+        <Spinner size="sm" tone="muted" label="Preparing questions" />
         <span>
           {knownCount > 0
             ? `Preparing question${expectedCount > 1 ? 's' : ''}…`
@@ -80,7 +82,7 @@ function SkeletonQuestion({
         className="text-sm leading-snug opacity-60"
         style={{ color: 'var(--foreground)' }}
       >
-        {hint?.question ?? <SkeletonBar widthClass="w-3/4" />}
+        {hint?.question ?? <Skeleton className="h-4 w-3/4" />}
       </div>
       <div className="space-y-1 pt-0.5">
         {Array.from({ length: optionCount }).map((_, i) => (
@@ -89,19 +91,10 @@ function SkeletonQuestion({
               className="size-3 rounded-full border opacity-40"
               style={{ borderColor: 'var(--border)' }}
             />
-            <SkeletonBar widthClass={i === optionCount - 1 ? 'w-1/3' : 'w-2/3'} />
+            <Skeleton className={`h-2.5 ${i === optionCount - 1 ? 'w-1/3' : 'w-2/3'}`} />
           </div>
         ))}
       </div>
     </div>
-  );
-}
-
-function SkeletonBar({ widthClass }: { widthClass: string }) {
-  return (
-    <div
-      className={`h-2.5 rounded animate-pulse ${widthClass}`}
-      style={{ backgroundColor: 'var(--border)', opacity: 0.5 }}
-    />
   );
 }

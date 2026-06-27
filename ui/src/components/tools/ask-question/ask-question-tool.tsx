@@ -1,8 +1,7 @@
 import { useTool } from '../../../hooks/useTool';
 import type { AskUserQuestionInput, AskUserQuestionResult, Question } from './types';
 import { InteractiveQuestionUI } from './interactive-question-ui';
-import { CompletedAnswersUI } from './completed-answers-ui';
-import { CancelledAnswersUI } from './cancelled-answers-ui';
+import { CompletedAnswersUI, CancelledHeader } from './completed-answers-ui';
 import { PreparingQuestionsUI } from './preparing-questions-ui';
 import { formatResponseMessage, parseQuestions } from './utils';
 import { AskToolDisplayMessages } from './constants';
@@ -111,7 +110,7 @@ Best Practices:
       // 3. RESPONDED — final state. Q&A (or cancelled) shown.
       responded: ({ args, result, outcome }) => {
         if (outcome === 'cancelled') {
-          return <CancelledAnswersUI />;
+          return <CancelledHeader />;
         }
         const questions = resolveQuestions(args) ?? [];
         if (questions.length === 0) return null;

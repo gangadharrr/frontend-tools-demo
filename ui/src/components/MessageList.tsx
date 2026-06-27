@@ -7,6 +7,7 @@ import type {
 } from '../types';
 import { MessageBubble } from './MessageBubble';
 import { ToolCallCard } from './ToolCallCard';
+import { TypingDots } from './TypingDots';
 import { useToolContext } from '../contexts/ToolContext';
 
 interface MessageListProps {
@@ -153,11 +154,5 @@ function pickRenderer(
  * or when the entry has no args yet.
  */
 function FallbackBody(_: { entry: UIToolCallEntry }) {
-  return (
-    <div className="flex items-center gap-2 py-1 text-xs text-[var(--muted)]">
-      <span className="typing-dot" />
-      <span className="typing-dot" />
-      <span className="typing-dot" />
-    </div>
-  );
+  return <TypingDots label="Tool loading" />;
 }

@@ -1,5 +1,7 @@
-import { X, Loader2 } from 'lucide-react';
+import { X } from 'lucide-react';
 import { Button } from '../../Button';
+import { Spinner } from '../../ui/spinner';
+import { RadioGroup, RadioGroupItem } from '../../ui/radio-group';
 import type { Question, QuestionFormState } from './types';
 import {
   CANCELLING_TEXT,
@@ -127,7 +129,7 @@ export function QuestionForm({
             className="h-7 w-7 shrink-0"
           >
             {isCancelling ? (
-              <Loader2 className="size-4 animate-spin" />
+              <Spinner size="md" tone="inherit" label="Dismissing" />
             ) : (
               <X className="size-4" />
             )}
@@ -222,7 +224,16 @@ export function QuestionForm({
               </OptionCard>
             </div>
           ) : (
-            <div className="divide-y" style={{ borderColor: 'var(--tool-border)' }}>
+            <RadioGroup
+              value={
+                otherSelected[questionIndex]
+                  ? 'other'
+                  : selectedAnswers[questionIndex]?.[0] ?? ''
+              }
+              onValueChange={handleRadioChange}
+              className="divide-y"
+              style={{ borderColor: 'var(--tool-border)' }}
+            >
               {question.options.map((option, optIdx) => {
                 const optionId = `q${questionIndex}-opt${optIdx}`;
                 const isSelected = selectedAnswers[questionIndex]?.[0] === option.label;
@@ -242,13 +253,9 @@ export function QuestionForm({
                       }
                     }}
                   >
-                    <input
-                      id={optionId}
-                      type="radio"
-                      name={`q${questionIndex}`}
+                    <RadioGroupItem
                       value={option.label}
-                      checked={isSelected}
-                      onChange={() => handleRadioChange(option.label)}
+                      id={optionId}
                       className="sr-only"
                     />
                   </OptionCard>
@@ -296,17 +303,9 @@ export function QuestionForm({
                   }
                 }}
               >
-                <input
-                  id={`q${questionIndex}-other`}
-                  type="radio"
-                  name={`q${questionIndex}`}
-                  value="other"
-                  checked={!!otherSelected[questionIndex]}
-                  onChange={() => handleRadioChange('other')}
-                  className="sr-only"
-                />
+                <RadioGroupItem value="other" id={`q${questionIndex}-other`} className="sr-only" />
               </OptionCard>
-            </div>
+            </RadioGroup>
           )}
         </div>
       </div>

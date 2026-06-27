@@ -1,5 +1,6 @@
-import { Loader2, CheckCircle2 } from 'lucide-react';
+import { CheckCircle2 } from 'lucide-react';
 import type { ToolCallEntry } from '../types';
+import { Spinner } from './ui/spinner';
 
 interface ToolCallCardProps {
   tool: ToolCallEntry;
@@ -17,7 +18,7 @@ export function ToolCallCard({ tool }: ToolCallCardProps) {
     >
       <div className="flex items-center gap-2 px-3 py-2">
         {isRunning ? (
-          <Loader2 className="size-3.5 shrink-0 text-[var(--primary)] animate-spin" />
+          <Spinner size="sm" tone="primary" />
         ) : (
           <CheckCircle2 className="size-3.5 shrink-0 text-[var(--success)]" />
         )}

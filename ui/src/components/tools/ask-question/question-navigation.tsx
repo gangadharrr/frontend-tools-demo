@@ -1,5 +1,6 @@
-import { ChevronLeft, ChevronRight, CheckCircle, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, CheckCircle } from 'lucide-react';
 import { Button } from '../../Button';
+import { Spinner } from '../../ui/spinner';
 import { CANCEL_TEXT, CANCELLING_TEXT, SUBMITTING_TEXT } from './constants';
 
 interface QuestionNavigationProps {
@@ -66,7 +67,7 @@ export function QuestionNavigation({
         >
           {isCancelling ? (
             <>
-              <Loader2 className="size-4 animate-spin" />
+              <Spinner size="md" tone="inherit" label={CANCELLING_TEXT} />
               {CANCELLING_TEXT}
             </>
           ) : (
@@ -84,7 +85,7 @@ export function QuestionNavigation({
         {isLastQuestion ? (
           isSubmitting ? (
             <>
-              <Loader2 className="size-4 animate-spin" />
+              <Spinner size="md" tone="inherit" label={SUBMITTING_TEXT} />
               {SUBMITTING_TEXT}
             </>
           ) : (

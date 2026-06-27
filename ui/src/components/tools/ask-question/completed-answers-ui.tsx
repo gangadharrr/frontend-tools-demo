@@ -1,6 +1,7 @@
 import { CheckCircle2, MinusCircle, AlertCircle, XCircle } from 'lucide-react';
 import type { Question, AskUserQuestionResult } from './types';
 import { NO_ANSWER_TEXT, QUESTION_KEY_PREFIX } from './constants';
+import { StatusBadge } from '../../ui/status-badge';
 
 interface CompletedAnswersUIProps {
   questions: Question[];
@@ -8,20 +9,29 @@ interface CompletedAnswersUIProps {
   outcome: 'success' | 'cancelled' | 'failure' | 'error';
 }
 
+type Outcome = 'success' | 'cancelled' | 'failure' | 'error';
+
+const OUTCOME_BADGES: Record<Outcome, { icon: typeof CheckCircle2; label: string; tone: 'success' | 'error' | 'muted' }> = {
+  success: { icon: CheckCircle2, label: 'Answered', tone: 'success' },
+  cancelled: { icon: MinusCircle, label: 'Questions skipped', tone: 'muted' },
+  failure: { icon: AlertCircle, label: 'Submission failed', tone: 'error' },
+  error: { icon: XCircle, label: 'Error', tone: 'error' },
+};
+
 /**
  * Responded-state UI for `ask_user_question`.
  * Renders the final Q&A pairing for every question, with an outcome-aware header.
  */
 export function CompletedAnswersUI({ questions, result, outcome }: CompletedAnswersUIProps) {
   if (outcome === 'cancelled') {
-    return <CancelledHeader />;
+    return <OutcomeBadge outcome="cancelled" />;
   }
 
   const answers = result?.answers ?? {};
 
   return (
     <div className="flex flex-col gap-1.5 py-0.5">
-      <OutcomeHeader outcome={outcome} />
+      <OutcomeBadge outcome={outcome} />
       <div className="flex flex-col gap-2 pl-1 pt-0.5">
         {questions.map((question, idx) => {
           const answer = answers[`${QUESTION_KEY_PREFIX}${idx}`] ?? '';
@@ -55,39 +65,19 @@ export function CompletedAnswersUI({ questions, result, outcome }: CompletedAnsw
   );
 }
 
-function OutcomeHeader({ outcome }: { outcome: 'success' | 'cancelled' | 'failure' | 'error' }) {
-  if (outcome === 'success') {
-    return (
-      <div className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--muted)' }}>
-        <CheckCircle2 className="size-3 shrink-0" style={{ color: 'var(--success)' }} />
-        <span>Answered</span>
-      </div>
-    );
-  }
-  if (outcome === 'failure') {
-    return (
-      <div className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--muted)' }}>
-        <AlertCircle className="size-3 shrink-0" style={{ color: 'var(--error-text)' }} />
-        <span>Submission failed</span>
-      </div>
-    );
-  }
-  if (outcome === 'error') {
-    return (
-      <div className="flex items-center gap-1.5 text-xs" style={{ color: 'var(--muted)' }}>
-        <XCircle className="size-3 shrink-0" style={{ color: 'var(--error-text)' }} />
-        <span>Error</span>
-      </div>
-    );
-  }
-  return <CancelledHeader />;
+/**
+ * Outcome → badge renderer. Single source of truth for the cancelled header
+ * (previously a duplicate of `cancelled-answers-ui.tsx`).
+ */
+function OutcomeBadge({ outcome }: { outcome: Outcome }) {
+  const { icon, label, tone } = OUTCOME_BADGES[outcome];
+  return <StatusBadge icon={icon} tone={tone}>{label}</StatusBadge>;
 }
 
-function CancelledHeader() {
-  return (
-    <div className="flex items-center gap-1.5 text-xs py-0.5" style={{ color: 'var(--muted)' }}>
-      <MinusCircle className="size-3 shrink-0" />
-      <span>Questions skipped</span>
-    </div>
-  );
+/**
+ * Exported so `ask-question-tool.tsx` can render the cancelled UI standalone
+ * without re-rendering the entire Q&A list.
+ */
+export function CancelledHeader() {
+  return <OutcomeBadge outcome="cancelled" />;
 }

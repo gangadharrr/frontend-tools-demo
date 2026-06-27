@@ -1,3 +1,4 @@
+import { Input } from '../../ui/input';
 import { CUSTOM_INPUT_PLACEHOLDER } from './constants';
 
 interface CustomAnswerInputProps {
@@ -10,7 +11,8 @@ interface CustomAnswerInputProps {
 
 /**
  * Inline input shown inside the "Other" OptionCard.
- * Stops click/keyboard propagation so it doesn't toggle its own row.
+ * Stops click + keydown propagation so the wrapping label doesn't toggle
+ * its own row.
  */
 export function CustomAnswerInput({
   questionIndex,
@@ -19,9 +21,8 @@ export function CustomAnswerInput({
   onSubmit,
 }: CustomAnswerInputProps) {
   return (
-    <input
+    <Input
       id={`custom-${questionIndex}`}
-      type="text"
       placeholder={CUSTOM_INPUT_PLACEHOLDER}
       value={value}
       onClick={event => event.stopPropagation()}
@@ -36,11 +37,7 @@ export function CustomAnswerInput({
         event.stopPropagation();
         onChange(event.target.value);
       }}
-      className="h-8 min-w-0 flex-1 rounded border bg-transparent px-2 text-sm shadow-none focus:outline-none focus:ring-0"
-      style={{
-        borderColor: 'transparent',
-        color: 'var(--foreground)',
-      }}
+      className="h-8 min-w-0 flex-1 border-0 bg-transparent px-0 shadow-none focus-visible:ring-0"
     />
   );
 }
