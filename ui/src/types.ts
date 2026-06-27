@@ -32,7 +32,7 @@ export interface ToolCallEntry {
   name: string;
   args: Record<string, unknown> | null;
   argsRaw?: string;
-  status: 'running' | 'complete';
+  status: 'running' | 'complete' | 'rejected';
   result?: string;
   timestamp: Date;
 }
@@ -43,8 +43,10 @@ export interface ToolCallEntry {
  * - streaming        : Args are streaming in via TOOL_CALL_ARGS. Partial data.
  * - waiting_for_input: Full args received + EXTERNAL_TOOL_CALL fired. Awaiting user action.
  * - responded        : User has submitted (or cancelled). Result is final.
+ * - rejected         : User replied in chat while the tool was pending — the tool call
+ *                      has been superseded and is no longer waiting for input.
  */
-export type UIToolStatus = 'streaming' | 'waiting_for_input' | 'responded';
+export type UIToolStatus = 'streaming' | 'waiting_for_input' | 'responded' | 'rejected';
 
 export interface UIToolCallEntry {
   kind: 'ui_tool_call';
@@ -121,6 +123,16 @@ export type ToolRespondedRenderer<TInput, TOutput> = React.ComponentType<{
 }>;
 
 /**
+ * Renderer for the "rejected" phase — shown when the user replies in chat
+ * while the tool is still pending. The tool was never answered; the user's
+ * chat message takes over. Optional: when absent, a generic "rejected"
+ * fallback is shown.
+ */
+export type ToolRejectedRenderer<TInput> = React.ComponentType<{
+  args: TInput;
+}>;
+
+/**
  * A frontend tool definition.
  *
  * The `render` object exposes three modes so any UI tool (questions, form filling,
@@ -128,11 +140,15 @@ export type ToolRespondedRenderer<TInput, TOutput> = React.ComponentType<{
  *   - streaming        : preparing/preview UI while args stream in (optional)
  *   - waitingForInput  : interactive UI shown to the user (required)
  *   - responded        : final state UI showing the outcome (required)
+ *   - rejected         : placeholder shown when the user replies in chat while the
+ *                        tool is still pending (optional; falls back to a generic
+ *                        "rejected" badge)
  */
 export interface ToolRenderers<TInput = Record<string, unknown>, TOutput = Record<string, unknown>> {
   streaming?: ToolStreamingRenderer<TInput>;
   waitingForInput: ToolWaitingRenderer<TInput, TOutput>;
   responded: ToolRespondedRenderer<TInput, TOutput>;
+  rejected?: ToolRejectedRenderer<TInput>;
 }
 
 export interface ToolDefinition<TInput = Record<string, unknown>, TOutput = Record<string, unknown>> {

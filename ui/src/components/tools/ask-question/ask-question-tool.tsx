@@ -1,7 +1,7 @@
 import { useTool } from '../../../hooks/useTool';
 import type { AskUserQuestionInput, AskUserQuestionResult, Question } from './types';
 import { InteractiveQuestionUI } from './interactive-question-ui';
-import { CompletedAnswersUI, CancelledHeader } from './completed-answers-ui';
+import { CompletedAnswersUI, CancelledHeader, RejectedAnswersUI } from './completed-answers-ui';
 import { PreparingQuestionsUI } from './preparing-questions-ui';
 import { formatResponseMessage, parseQuestions } from './utils';
 import { AskToolDisplayMessages } from './constants';
@@ -121,6 +121,15 @@ Best Practices:
             outcome={outcome}
           />
         );
+      },
+
+      // 4. REJECTED — user replied in chat while the question form was pending;
+      //    the question is superseded by the new message. Show a compact
+      //    "rejected" header together with the questions that were asked so
+      //    the user has context about what was bypassed.
+      rejected: ({ args }) => {
+        const questions = resolveQuestions(args) ?? [];
+        return <RejectedAnswersUI questions={questions} />;
       },
     },
     handle: (_args, result) => {

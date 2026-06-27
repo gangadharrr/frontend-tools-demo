@@ -85,9 +85,41 @@ function findLastToolCall(arr: ConversationEntry[]): ToolCallEntry | undefined {
 function findLastPendingUIToolCall(arr: ConversationEntry[]): UIToolCallEntry | undefined {
   for (let i = arr.length - 1; i >= 0; i--) {
     const entry = arr[i];
-    if (entry.kind === 'ui_tool_call' && entry.status !== 'responded') return entry;
+    if (
+      entry.kind === 'ui_tool_call' &&
+      entry.status !== 'responded' &&
+      entry.status !== 'rejected'
+    ) {
+      return entry;
+    }
   }
   return undefined;
+}
+
+/**
+ * Mark any in-flight tool calls as `rejected`.
+ *
+ * Invoked when the user sends a new chat message while a tool is still
+ * pending — that chat message supersedes the tool, so the pending tool
+ * should render its `rejected` UI instead of remaining "waiting".
+ *
+ * - Backend tools in `running` → `rejected`
+ * - Frontend tools in `streaming` or `waiting_for_input` → `rejected`
+ * - Anything already terminal (`complete`, `responded`, `rejected`) is left alone.
+ */
+function rejectPendingTools(entries: ConversationEntry[]): ConversationEntry[] {
+  return entries.map(entry => {
+    if (entry.kind === 'tool_call' && entry.status === 'running') {
+      return { ...entry, status: 'rejected' };
+    }
+    if (
+      entry.kind === 'ui_tool_call' &&
+      (entry.status === 'streaming' || entry.status === 'waiting_for_input')
+    ) {
+      return { ...entry, status: 'rejected' };
+    }
+    return entry;
+  });
 }
 
 function findUIToolCallByToolId(arr: ConversationEntry[], toolId: string): UIToolCallEntry | undefined {
@@ -333,7 +365,12 @@ export function useChat(options: UseChatOptions = {}) {
     setError(null);
     setIsLoading(true);
 
-    setEntries(prev => [...prev, userMsg(trimmed)]);
+    // A new chat message supersedes any in-flight tool — mark pending tools
+    // as rejected so their `rejected` renderer takes over.
+    setEntries(prev => {
+      const rejected = rejectPendingTools(prev);
+      return [...rejected, userMsg(trimmed)];
+    });
 
     try {
       await processEvents({ message: trimmed });

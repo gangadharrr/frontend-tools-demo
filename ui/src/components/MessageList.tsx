@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef } from 'react';
+import { XCircle } from 'lucide-react';
 import type {
   ConversationEntry,
   UIToolCallEntry,
@@ -8,6 +9,7 @@ import type {
 import { MessageBubble } from './MessageBubble';
 import { ToolCallCard } from './ToolCallCard';
 import { TypingDots } from './TypingDots';
+import { StatusBadge } from './ui/status-badge';
 import { useToolContext } from '../contexts/ToolContext';
 
 interface MessageListProps {
@@ -102,6 +104,23 @@ function UIToolCallCard({ entry, onSubmit, getTool }: UIToolCallCardProps) {
     );
   }
 
+  // Rejected entries: prefer the tool's custom renderer, otherwise show a
+  // generic "Tool rejected" badge so the slot is never empty.
+  if (entry.status === 'rejected') {
+    const Renderer = tool.render.rejected as
+      | React.ComponentType<{ args: Record<string, unknown>; argsRaw?: string }>
+      | undefined;
+    return Renderer ? (
+      <Renderer
+        key={entry.id}
+        args={entry.args}
+        argsRaw={entry.argsRaw}
+      />
+    ) : (
+      <RejectedFallback />
+    );
+  }
+
   // Pick the right renderer for the current phase.
   const Renderer = pickRenderer(tool, entry.status);
 
@@ -123,7 +142,8 @@ function UIToolCallCard({ entry, onSubmit, getTool }: UIToolCallCardProps) {
 
 /**
  * Resolve the appropriate renderer from the tool definition for a given status.
- * `streaming` is optional — fall back to a generic placeholder if absent.
+ * `streaming` and `rejected` are optional — fall back to a generic placeholder
+ * if absent.
  */
 function pickRenderer(
   tool: ToolDefinition,
@@ -144,6 +164,8 @@ function pickRenderer(
       return tool.render.waitingForInput as never;
     case 'responded':
       return tool.render.responded as never;
+    case 'rejected':
+      return tool.render.rejected as never;
     default:
       return undefined;
   }
@@ -155,4 +177,16 @@ function pickRenderer(
  */
 function FallbackBody(_: { entry: UIToolCallEntry }) {
   return <TypingDots label="Tool loading" />;
+}
+
+/**
+ * Generic "rejected" badge shown when the user replied in chat while a tool
+ * was still pending and the tool didn't supply its own `rejected` renderer.
+ */
+function RejectedFallback() {
+  return (
+    <StatusBadge icon={XCircle} tone="error">
+      Tool rejected
+    </StatusBadge>
+  );
 }

@@ -1,4 +1,4 @@
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, XCircle } from 'lucide-react';
 import type { ToolCallEntry } from '../types';
 import { Spinner } from './ui/spinner';
 
@@ -8,17 +8,28 @@ interface ToolCallCardProps {
 
 export function ToolCallCard({ tool }: ToolCallCardProps) {
   const isRunning = tool.status === 'running';
+  const isRejected = tool.status === 'rejected';
+
+  // Accent stripe mirrors the lifecycle phase:
+  //   running  → primary
+  //   rejected → error
+  //   complete → success
+  const accentVar = isRunning
+    ? 'var(--primary)'
+    : isRejected
+      ? 'var(--error-text)'
+      : 'var(--success)';
 
   return (
     <div
       className="rounded-lg border border-[var(--tool-border)] bg-[var(--tool-bg)] overflow-hidden"
-      style={{
-        borderLeft: `3px solid ${isRunning ? 'var(--primary)' : 'var(--success)'}`,
-      }}
+      style={{ borderLeft: `3px solid ${accentVar}` }}
     >
       <div className="flex items-center gap-2 px-3 py-2">
         {isRunning ? (
           <Spinner size="sm" tone="primary" />
+        ) : isRejected ? (
+          <XCircle className="size-3.5 shrink-0" style={{ color: 'var(--error-text)' }} />
         ) : (
           <CheckCircle2 className="size-3.5 shrink-0 text-[var(--success)]" />
         )}
@@ -27,6 +38,11 @@ export function ToolCallCard({ tool }: ToolCallCardProps) {
         </span>
         {isRunning && (
           <span className="ml-auto text-xs text-[var(--muted)]">running…</span>
+        )}
+        {isRejected && (
+          <span className="ml-auto text-xs" style={{ color: 'var(--error-text)' }}>
+            rejected
+          </span>
         )}
       </div>
       {(tool.args || tool.argsRaw) && (
