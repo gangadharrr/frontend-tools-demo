@@ -8,18 +8,32 @@ import type { UIToolCallEntry } from '../types';
 
 export function ChatContainer() {
   const { getToolMetadata, getTool } = useToolContext();
-  const { entries, isLoading, error, sendMessage, stop, resumeAgent } = useChat(getToolMetadata);
+  const { entries, isLoading, error, sendMessage, stop, resumeAgent, updateEntry } = useChat({
+    getToolMetadata,
+    getTool,
+  });
 
-  const handleToolSubmit = useCallback((entry: UIToolCallEntry, result: Record<string, unknown>) => {
-    const tool = getTool(entry.name);
-    if (!tool) return;
-    const commandResponse = tool.handle(entry.args, result);
-    resumeAgent(commandResponse);
-  }, [getTool, resumeAgent]);
+  const handleToolSubmit = useCallback(
+    (entry: UIToolCallEntry, result: Record<string, unknown>) => {
+      const tool = getTool(entry.name);
+      if (!tool) return;
+
+      // Persist the structured submission on the entry *immediately* so the
+      // `responded` renderer can read it. This survives the round-trip to
+      // the backend (the backend's TOOL_CALL_RESULT must not overwrite it).
+      updateEntry(entry.id, { result });
+
+      const commandResponse = tool.handle(entry.args as never, result as never);
+      resumeAgent(commandResponse);
+    },
+    [getTool, resumeAgent, updateEntry],
+  );
 
   return (
     <div className="flex h-screen flex-col bg-[var(--page)]">
+      {/* Tool self-registration side effects. */}
       <AskQuestionTool />
+
       <header className="shrink-0 border-b border-[var(--border)] bg-[var(--page)]">
         <div className="mx-auto flex h-12 max-w-3xl items-center px-4" />
       </header>

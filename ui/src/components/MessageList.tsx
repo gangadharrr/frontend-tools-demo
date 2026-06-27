@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useRef } from 'react';
-import type { ConversationEntry, UIToolCallEntry } from '../types';
+import type {
+  ConversationEntry,
+  UIToolCallEntry,
+  ToolDefinition,
+  UIToolStatus,
+} from '../types';
 import { MessageBubble } from './MessageBubble';
 import { ToolCallCard } from './ToolCallCard';
 import { useToolContext } from '../contexts/ToolContext';
@@ -74,15 +79,18 @@ export function MessageList({ entries, isLoading, onToolSubmit }: MessageListPro
   );
 }
 
-function UIToolCallCard({
-  entry,
-  onSubmit,
-  getTool,
-}: {
+interface UIToolCallCardProps {
   entry: UIToolCallEntry;
   onSubmit: (result: Record<string, unknown>) => void;
-  getTool: (name: string) => import('../types').ToolDefinition | undefined;
-}) {
+  getTool: (name: string) => ToolDefinition | undefined;
+}
+
+/**
+ * Dispatches to the tool's renderer for the entry's current lifecycle phase.
+ * Falls back to a generic chrome + header if the tool isn't registered
+ * (e.g. a stale session) or the tool doesn't provide a renderer for the phase.
+ */
+function UIToolCallCard({ entry, onSubmit, getTool }: UIToolCallCardProps) {
   const tool = getTool(entry.name);
 
   if (!tool) {
@@ -93,41 +101,63 @@ function UIToolCallCard({
     );
   }
 
-  if (entry.status === 'pending_input' && tool) {
-    const RenderComponent = tool.render;
-    return (
-      <div
-        className="rounded-lg border border-[var(--tool-border)] bg-[var(--tool-bg)] overflow-hidden"
-        style={{ borderLeft: '3px solid var(--primary)' }}
-      >
-        <div className="flex items-center gap-2 border-b border-[var(--tool-border)] px-3 py-2">
-          <span className="font-mono text-xs font-medium text-[var(--foreground)]">
-            {entry.name}
-          </span>
-          <span className="ml-auto text-xs text-[var(--muted)]">awaiting input…</span>
-        </div>
-        <div className="p-3">
-          <RenderComponent key={entry.id} args={entry.args} onSubmit={onSubmit} />
-        </div>
-      </div>
-    );
-  }
+  // Pick the right renderer for the current phase.
+  const Renderer = pickRenderer(tool, entry.status);
 
+  return Renderer ? (
+    <Renderer
+      // Re-mount on entry id change so internal component state resets between tool calls.
+      key={entry.id}
+      args={entry.args as never}
+      argsRaw={entry.argsRaw}
+      onSubmit={onSubmit}
+      result={entry.result as never}
+      outcome={entry.outcome ?? 'success'}
+    />
+  ) : (
+    <FallbackBody entry={entry} />
+
+  );
+}
+
+/**
+ * Resolve the appropriate renderer from the tool definition for a given status.
+ * `streaming` is optional — fall back to a generic placeholder if absent.
+ */
+function pickRenderer(
+  tool: ToolDefinition,
+  status: UIToolStatus,
+):
+  | React.ComponentType<{
+    args: Record<string, unknown>;
+    argsRaw?: string;
+    onSubmit: (result: Record<string, unknown>) => void;
+    result?: Record<string, unknown>;
+    outcome: 'success' | 'cancelled' | 'failure' | 'error';
+  }>
+  | undefined {
+  switch (status) {
+    case 'streaming':
+      return tool.render.streaming as never;
+    case 'waiting_for_input':
+      return tool.render.waitingForInput as never;
+    case 'responded':
+      return tool.render.responded as never;
+    default:
+      return undefined;
+  }
+}
+
+/**
+ * Shown when a tool doesn't provide a renderer for the current phase,
+ * or when the entry has no args yet.
+ */
+function FallbackBody(_: { entry: UIToolCallEntry }) {
   return (
-    <div
-      className="rounded-lg border border-[var(--tool-border)] bg-[var(--tool-bg)] overflow-hidden"
-      style={{ borderLeft: '3px solid var(--success)' }}
-    >
-      <div className="flex items-center gap-2 px-3 py-2">
-        <span className="font-mono text-xs font-medium text-[var(--foreground)]">
-          {entry.name}
-        </span>
-      </div>
-      {entry.result && (
-        <div className="border-t border-[var(--tool-border)] px-3 py-2 text-xs text-[var(--foreground)] leading-relaxed">
-          {entry.result}
-        </div>
-      )}
+    <div className="flex items-center gap-2 py-1 text-xs text-[var(--muted)]">
+      <span className="typing-dot" />
+      <span className="typing-dot" />
+      <span className="typing-dot" />
     </div>
   );
 }

@@ -6,6 +6,8 @@ import type {
   ToolCallEntry,
   UIToolCallEntry,
   ToolMetadata,
+  ToolDefinition,
+  UIToolStatus,
 } from '../types';
 import { streamChat } from '../api/chat';
 import { extractThinking } from '../utils/extract-think';
@@ -28,8 +30,22 @@ function toolCallEntry(name: string): ToolCallEntry {
   return { kind: 'tool_call', id: uid(), name, args: null, status: 'running', timestamp: new Date() };
 }
 
-function uiToolCallEntry(name: string, toolId: string, args: Record<string, unknown>): UIToolCallEntry {
-  return { kind: 'ui_tool_call', id: uid(), name, toolId, args, status: 'pending_input', timestamp: new Date() };
+function uiToolStreamingEntry(
+  name: string,
+  toolCallId: string,
+  args: Record<string, unknown>,
+  argsRaw: string,
+): UIToolCallEntry {
+  return {
+    kind: 'ui_tool_call',
+    id: uid(),
+    name,
+    toolCallId,
+    args,
+    argsRaw,
+    status: 'streaming',
+    timestamp: new Date(),
+  };
 }
 
 function parseArgs(raw: string): Record<string, unknown> | null {
@@ -69,17 +85,72 @@ function findLastToolCall(arr: ConversationEntry[]): ToolCallEntry | undefined {
 function findLastPendingUIToolCall(arr: ConversationEntry[]): UIToolCallEntry | undefined {
   for (let i = arr.length - 1; i >= 0; i--) {
     const entry = arr[i];
-    if (entry.kind === 'ui_tool_call' && entry.status === 'pending_input') return entry;
+    if (entry.kind === 'ui_tool_call' && entry.status !== 'responded') return entry;
   }
   return undefined;
 }
 
-export function useChat(getToolMetadata?: () => ToolMetadata[]) {
+function findUIToolCallByToolId(arr: ConversationEntry[], toolId: string): UIToolCallEntry | undefined {
+  for (let i = arr.length - 1; i >= 0; i--) {
+    const entry = arr[i];
+    if (entry.kind === 'ui_tool_call' && entry.toolId === toolId) return entry;
+  }
+  return undefined;
+}
+
+function findUIToolCallByToolCallId(
+  arr: ConversationEntry[],
+  toolCallId: string,
+): UIToolCallEntry | undefined {
+  for (let i = arr.length - 1; i >= 0; i--) {
+    const entry = arr[i];
+    if (entry.kind === 'ui_tool_call' && entry.toolCallId === toolCallId) return entry;
+  }
+  return undefined;
+}
+
+function findStreamingUIToolCall(arr: ConversationEntry[], name: string): UIToolCallEntry | undefined {
+  for (let i = arr.length - 1; i >= 0; i--) {
+    const entry = arr[i];
+    if (entry.kind === 'ui_tool_call' && entry.status === 'streaming' && entry.name === name) {
+      return entry;
+    }
+  }
+  return undefined;
+}
+
+function inferOutcome(
+  raw: string | undefined,
+): 'success' | 'cancelled' | 'failure' | 'error' {
+  if (!raw) return 'success';
+  const s = raw.toLowerCase();
+  if (s.includes('cancel')) return 'cancelled';
+  if (s.includes('error')) return 'error';
+  if (s.includes('failure') || s.includes('failed')) return 'failure';
+  return 'success';
+}
+
+interface UseChatOptions {
+  getToolMetadata?: () => ToolMetadata[];
+  /**
+   * Auto-detect whether a tool name belongs to a frontend-registered tool.
+   * If not provided, all tools are treated as backend tools (no UI rendering).
+   */
+  getTool?: (name: string) => ToolDefinition | undefined;
+}
+
+export function useChat(options: UseChatOptions = {}) {
+  const { getToolMetadata, getTool } = options;
   const [entries, setEntries] = useState<ConversationEntry[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const threadIdRef = useRef<string | undefined>(undefined);
   const abortRef = useRef<AbortController | null>(null);
+
+  const isFrontendTool = useCallback(
+    (name: string) => Boolean(getTool?.(name)),
+    [getTool],
+  );
 
   const processEvents = useCallback(async (
     request: { message?: string; commandResponse?: Record<string, unknown> },
@@ -87,8 +158,11 @@ export function useChat(getToolMetadata?: () => ToolMetadata[]) {
     const abortController = new AbortController();
     abortRef.current = abortController;
 
+    // Backend tool args accumulator (for non-frontend tools)
     const toolArgsMap = new Map<string, string>();
     const toolIndexMap = new Map<number, ToolCallEntry>();
+    // Frontend tool streaming accumulator — keyed by toolCallId (backend chunk id)
+    const uiToolRawByCallId = new Map<string, string>();
 
     const frontendTools = getToolMetadata?.();
 
@@ -130,7 +204,27 @@ export function useChat(getToolMetadata?: () => ToolMetadata[]) {
               for (const chunk of chunks) {
                 const idx = chunk.index ?? 0;
                 const name = chunk.name ?? 'tool';
+                const chunkId = chunk.id ?? `i:${idx}`;
 
+                // AUTO-DETECT: if this name is a registered frontend tool, route to UI pipeline.
+                if (isFrontendTool(name)) {
+                  const accumulated = (uiToolRawByCallId.get(chunkId) ?? '') + (chunk.args ?? '');
+                  uiToolRawByCallId.set(chunkId, accumulated);
+                  const parsed = parseArgs(accumulated) ?? {};
+
+                  let entry = findUIToolCallByToolCallId(updated, chunkId);
+                  if (!entry) {
+                    // First chunk for this frontend tool call — create streaming entry.
+                    entry = uiToolStreamingEntry(name, chunkId, parsed, accumulated);
+                    updated.push(entry);
+                  } else {
+                    entry.args = parsed;
+                    entry.argsRaw = accumulated;
+                  }
+                  continue;
+                }
+
+                // Backend tool path (unchanged).
                 if (!toolIndexMap.has(idx)) {
                   const entry = toolCallEntry(name);
                   toolIndexMap.set(idx, entry);
@@ -160,7 +254,18 @@ export function useChat(getToolMetadata?: () => ToolMetadata[]) {
             const pendingUI = findLastPendingUIToolCall(updated);
             if (pendingUI) {
               const idx = updated.indexOf(pendingUI);
-              updated[idx] = { ...pendingUI, status: 'complete', result: toolMessage || undefined };
+              const newOutcome = inferOutcome(toolMessage);
+              // IMPORTANT: Preserve any structured result already set by the submit
+              // handler (e.g. { answers, cancelled, success }). Only fall back to
+              // a plain `{ message }` if the renderer didn't supply one — that way
+              // the user's submission survives the round-trip to the backend.
+              const preservedResult = pendingUI.result;
+              updated[idx] = {
+                ...pendingUI,
+                status: 'responded',
+                outcome: newOutcome,
+                result: preservedResult ?? (toolMessage ? { message: toolMessage } : undefined),
+              };
               return updated;
             }
             const lastTool = findLastToolCall(updated);
@@ -174,10 +279,43 @@ export function useChat(getToolMetadata?: () => ToolMetadata[]) {
           const data = event.eventData as Record<string, unknown>;
           const toolName = data.toolName as string;
           const toolId = data.toolId as string;
-          const toolArgs = data.toolArgs as Record<string, unknown>;
+          const toolArgs = (data.toolArgs as Record<string, unknown>) ?? {};
 
-          setEntries(prev => [...prev, uiToolCallEntry(toolName, toolId, toolArgs)]);
-          return; // Stop consuming — wait for user input
+          setEntries(prev => {
+            const updated = [...prev];
+
+            // 1. Try to find existing entry by toolId (some backends set it early).
+            let entry = toolId ? findUIToolCallByToolId(updated, toolId) : undefined;
+
+            // 2. Fallback: find the most recent streaming entry for this tool name.
+            if (!entry) entry = findStreamingUIToolCall(updated, toolName);
+
+            const nextStatus: UIToolStatus = 'waiting_for_input';
+
+            if (entry) {
+              const idx = updated.indexOf(entry);
+              updated[idx] = {
+                ...entry,
+                status: nextStatus,
+                toolId: toolId ?? entry.toolId,
+                args: { ...entry.args, ...toolArgs }, // merge — prefer freshest from backend
+              };
+              return updated;
+            }
+
+            // 3. No streaming phase observed — backend jumped straight to EXTERNAL_TOOL_CALL.
+            updated.push({
+              kind: 'ui_tool_call',
+              id: uid(),
+              name: toolName,
+              toolId,
+              args: toolArgs,
+              status: nextStatus,
+              timestamp: new Date(),
+            });
+            return updated;
+          });
+          // Do NOT return here — the backend may still emit text/tool_call_result for this round.
         }
       }
     } catch (err: unknown) {
@@ -186,7 +324,7 @@ export function useChat(getToolMetadata?: () => ToolMetadata[]) {
     } finally {
       abortRef.current = null;
     }
-  }, [getToolMetadata]);
+  }, [getToolMetadata, isFrontendTool]);
 
   const sendMessage = useCallback(async (input: string) => {
     const trimmed = input.trim();
@@ -233,7 +371,25 @@ export function useChat(getToolMetadata?: () => ToolMetadata[]) {
     idCounter = 0;
   }, []);
 
-  return { entries, isLoading, error, sendMessage, stop, clear, resumeAgent };
+  /**
+   * Patch an existing entry in-place. Used by the parent to attach structured
+   * submission data (e.g. `{ answers, cancelled }`) to a UI tool call so the
+   * `responded` renderer can read it. No-op if no entry matches the id.
+   */
+  const updateEntry = useCallback(
+    (id: string, patch: Partial<UIToolCallEntry>) => {
+      setEntries(prev => {
+        const idx = prev.findIndex(e => e.id === id);
+        if (idx === -1) return prev;
+        const next = [...prev];
+        const existing = next[idx];
+        if (existing.kind !== 'ui_tool_call') return prev;
+        next[idx] = { ...existing, ...patch } as UIToolCallEntry;
+        return next;
+      });
+    },
+    [],
+  );
+
+  return { entries, isLoading, error, sendMessage, stop, clear, resumeAgent, updateEntry };
 }
-
-

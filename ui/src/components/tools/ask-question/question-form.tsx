@@ -1,167 +1,314 @@
-import { useState } from 'react';
-import { Loader2, CheckCircle } from 'lucide-react';
+import { X, Loader2 } from 'lucide-react';
 import { Button } from '../../Button';
-import type { Question } from './types';
-import { QUESTION_KEY_PREFIX } from './constants';
+import type { Question, QuestionFormState } from './types';
+import {
+  CANCELLING_TEXT,
+  OTHER_OPTION_DESCRIPTION,
+  OTHER_OPTION_LABEL,
+} from './constants';
+import { OptionCard } from './option-card';
+import { CustomAnswerInput } from './custom-answer-input';
 
 interface QuestionFormProps {
-  questions: Question[];
-  onSubmit: (answers: Record<string, string>) => void;
-  onCancel: () => void;
+  question: Question;
+  questionIndex: number;
+  formState: QuestionFormState;
+  onFormStateChange: (
+    updater: (prev: QuestionFormState) => QuestionFormState,
+  ) => void;
+  /** Auto-submit handler for single-select picks (single-question flow). */
+  onSingleSelectAnswer?: (answer: string) => void;
+  /** Enter-key handler inside the "Other" custom input. */
+  onCustomAnswerSubmit?: () => void;
+  /** Top-right dismiss (X) — cancels the entire form. */
+  onDismiss?: () => void;
+  /** Per-question Skip — only mounted in multi-question flow. */
+  onSkip?: () => void;
+  isCancelling?: boolean;
+  isSubmitting?: boolean;
 }
 
-export function QuestionForm({ questions, onSubmit, onCancel }: QuestionFormProps) {
-  const [selected, setSelected] = useState<Record<number, string[]>>({});
-  const [otherText, setOtherText] = useState<Record<number, string>>({});
-  const [otherSelected, setOtherSelected] = useState<Record<number, boolean>>({});
-  const [isSubmitting, setIsSubmitting] = useState(false);
+const OPTIONS_CONTAINER_CLASS =
+  'max-h-64 overflow-y-auto overflow-x-hidden custom-scrollbar';
 
-  const question = questions[0];
-  const qIndex = 0;
+/**
+ * Renders ONE question with its options.
+ *
+ * State is owned by the parent (`InteractiveQuestionUI`) via `QuestionFormState`,
+ * so this component is purely presentational + intent-emitting.
+ */
+export function QuestionForm({
+  question,
+  questionIndex,
+  formState,
+  onFormStateChange,
+  onSingleSelectAnswer,
+  onCustomAnswerSubmit,
+  onDismiss,
+  onSkip,
+  isCancelling = false,
+  isSubmitting = false,
+}: QuestionFormProps) {
+  const { selectedAnswers, customInputs, otherSelected } = formState;
 
-  const currentSelected = selected[qIndex] || [];
-  const currentOtherText = otherText[qIndex] || '';
-  const isOther = otherSelected[qIndex] || false;
+  const handleCheckboxToggle = (optionLabel: string, isChecked: boolean) => {
+    onFormStateChange(prev => {
+      const current = prev.selectedAnswers[questionIndex] || [];
+      const updated = isChecked
+        ? [...current, optionLabel]
+        : current.filter(label => label !== optionLabel);
+      return {
+        ...prev,
+        selectedAnswers: { ...prev.selectedAnswers, [questionIndex]: updated },
+      };
+    });
+  };
 
-  const handleSelect = (label: string) => {
-    if (question.multiSelect) {
-      const current = currentSelected;
-      if (current.includes(label)) {
-        setSelected(prev => ({ ...prev, [qIndex]: current.filter(l => l !== label) }));
-      } else {
-        setSelected(prev => ({ ...prev, [qIndex]: [...current, label] }));
-      }
+  const handleRadioChange = (value: string) => {
+    if (value === 'other') {
+      onFormStateChange(prev => ({
+        ...prev,
+        otherSelected: { ...prev.otherSelected, [questionIndex]: true },
+        selectedAnswers: { ...prev.selectedAnswers, [questionIndex]: [] },
+      }));
+      setTimeout(() => {
+        document.getElementById(`custom-${questionIndex}`)?.focus();
+      }, 0);
     } else {
-      setSelected(prev => ({ ...prev, [qIndex]: [label] }));
-      setOtherSelected(prev => ({ ...prev, [qIndex]: false }));
-      setOtherText(prev => ({ ...prev, [qIndex]: '' }));
+      onFormStateChange(prev => ({
+        ...prev,
+        otherSelected: { ...prev.otherSelected, [questionIndex]: false },
+        selectedAnswers: { ...prev.selectedAnswers, [questionIndex]: [value] },
+      }));
+      onSingleSelectAnswer?.(value);
     }
   };
 
-  const handleOtherToggle = () => {
-    if (isOther) {
-      setOtherSelected(prev => ({ ...prev, [qIndex]: false }));
-      setOtherText(prev => ({ ...prev, [qIndex]: '' }));
-    } else {
-      setOtherSelected(prev => ({ ...prev, [qIndex]: true }));
-      setSelected(prev => ({ ...prev, [qIndex]: [] }));
+  const handleOtherCheckboxToggle = () => {
+    const newOtherSelected = !otherSelected[questionIndex];
+    onFormStateChange(prev => ({
+      ...prev,
+      otherSelected: { ...prev.otherSelected, [questionIndex]: newOtherSelected },
+    }));
+    if (newOtherSelected) {
+      setTimeout(() => {
+        document.getElementById(`custom-${questionIndex}`)?.focus();
+      }, 0);
     }
   };
 
-  const handleOtherTextChange = (text: string) => {
-    setOtherText(prev => ({ ...prev, [qIndex]: text }));
-  };
-
-  const isAnswered = currentSelected.length > 0 || (isOther && currentOtherText.trim().length > 0);
-
-  const handleSubmit = () => {
-    setIsSubmitting(true);
-    let answer = '';
-    if (isOther && currentOtherText.trim()) {
-      answer = currentOtherText.trim();
-    } else {
-      answer = currentSelected.join(', ');
-    }
-    onSubmit({ [`${QUESTION_KEY_PREFIX}0`]: answer });
+  const handleCustomInputChange = (value: string) => {
+    onFormStateChange(prev => ({
+      ...prev,
+      customInputs: { ...prev.customInputs, [questionIndex]: value },
+    }));
   };
 
   return (
     <div className="space-y-3">
-      <div className="flex items-start gap-3 pt-1">
+      <div className="flex items-start gap-3 px-1 pt-1">
         <div className="min-w-0 flex-1 space-y-1">
-          <div className="text-xs font-medium" style={{ color: 'var(--muted)' }}>{question.header}</div>
-          <p className="text-sm leading-relaxed" style={{ color: 'var(--foreground)' }}>{question.question}</p>
+          <div className="text-xs font-medium" style={{ color: 'var(--muted)' }}>
+            {question.header}
+          </div>
+          <p className="text-sm leading-relaxed" style={{ color: 'var(--foreground)' }}>
+            {question.question}
+          </p>
         </div>
-      </div>
-
-      <div className="flex flex-col gap-0.5">
-        {question.options.map((option, optIdx) => {
-          const isSelected = currentSelected.includes(option.label);
-          return (
-            <div
-              key={optIdx}
-              onClick={() => handleSelect(option.label)}
-              className="flex items-center gap-2.5 rounded-sm px-2.5 py-2 cursor-pointer transition-colors"
-              style={{
-                backgroundColor: isSelected ? 'var(--primary)' + '20' : 'transparent',
-                border: isSelected ? '1px solid var(--primary)' : '1px solid transparent',
-              }}
-            >
-              <div
-                className="size-4 rounded-full border-2 flex items-center justify-center"
-                style={{ borderColor: isSelected ? 'var(--primary)' : 'var(--border)' }}
-              >
-                {isSelected && <div className="size-2 rounded-full" style={{ backgroundColor: 'var(--primary)' }} />}
-              </div>
-              <div className="min-w-0 flex-1">
-                <div className="text-sm" style={{ color: 'var(--foreground)' }}>{option.label}</div>
-                {option.description && (
-                  <div className="text-xs" style={{ color: 'var(--muted)' }}>{option.description}</div>
-                )}
-              </div>
-            </div>
-          );
-        })}
-
-        <div
-          onClick={handleOtherToggle}
-          className="flex items-center gap-2.5 rounded-sm px-2.5 py-2 cursor-pointer transition-colors"
-          style={{
-            backgroundColor: isOther ? 'var(--primary)' + '20' : 'transparent',
-            border: isOther ? '1px solid var(--primary)' : '1px solid transparent',
-          }}
-        >
-          <div
-            className="size-4 rounded-full border-2 flex items-center justify-center"
-            style={{ borderColor: isOther ? 'var(--primary)' : 'var(--border)' }}
+        {onDismiss && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon"
+            aria-label="Dismiss questions"
+            title="Dismiss questions"
+            disabled={isCancelling || isSubmitting}
+            onClick={onDismiss}
+            className="h-7 w-7 shrink-0"
           >
-            {isOther && <div className="size-2 rounded-full" style={{ backgroundColor: 'var(--primary)' }} />}
-          </div>
-          <div className="min-w-0 flex-1">
-            <div className="text-sm" style={{ color: 'var(--foreground)' }}>Something else</div>
-            {isOther && (
-              <input
-                type="text"
-                placeholder="Type your answer..."
-                value={currentOtherText}
-                onClick={(e) => e.stopPropagation()}
-                onChange={(e) => {
-                  e.stopPropagation();
-                  handleOtherTextChange(e.target.value);
-                }}
-                className="mt-1 w-full h-8 px-2 rounded border text-sm"
-                style={{ 
-                  borderColor: 'var(--border)', 
-                  backgroundColor: 'var(--input-bg)',
-                  color: 'var(--foreground)'
-                }}
-              />
+            {isCancelling ? (
+              <Loader2 className="size-4 animate-spin" />
+            ) : (
+              <X className="size-4" />
             )}
-          </div>
-        </div>
+          </Button>
+        )}
       </div>
 
-      <div className="flex items-center gap-2 pt-2" style={{ borderTop: '1px solid var(--border)' }}>
-        <Button 
-          variant="outline" 
-          size="sm" 
-          onClick={onCancel}
-          disabled={isSubmitting}
-        >
-          Skip
-        </Button>
-        <div className="flex-1" />
-        <Button 
-          size="sm" 
-          onClick={handleSubmit}
-          disabled={!isAnswered || isSubmitting}
-        >
-          {isSubmitting ? (
-            <><Loader2 className="size-4 animate-spin" /> Submitting…</>
+      <div className="overflow-hidden rounded-sm" style={{ borderTop: '1px solid var(--tool-border)' }}>
+        <div className={OPTIONS_CONTAINER_CLASS}>
+          {question.multiSelect ? (
+            <div className="divide-y" style={{ borderColor: 'var(--tool-border)' }}>
+              {question.options.map((option, optIdx) => {
+                const optionId = `q${questionIndex}-opt${optIdx}`;
+                const isSelected = (selectedAnswers[questionIndex] || []).includes(option.label);
+
+                return (
+                  <OptionCard
+                    key={optIdx}
+                    id={optionId}
+                    isSelected={isSelected}
+                    label={option.label}
+                    description={option.description}
+                    optionIndex={optIdx + 1}
+                    isMultiSelect
+                    onKeyDown={e => {
+                      if (e.key === ' ') {
+                        e.preventDefault();
+                        handleCheckboxToggle(option.label, !isSelected);
+                      }
+                    }}
+                  >
+                    <input
+                      id={optionId}
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={e => handleCheckboxToggle(option.label, e.target.checked)}
+                      className="sr-only"
+                    />
+                  </OptionCard>
+                );
+              })}
+
+              <OptionCard
+                id={`q${questionIndex}-other`}
+                isSelected={!!otherSelected[questionIndex]}
+                label={OTHER_OPTION_LABEL}
+                description={OTHER_OPTION_DESCRIPTION}
+                isOther
+                isMultiSelect
+                inlineContent={
+                  otherSelected[questionIndex] ? (
+                    <CustomAnswerInput
+                      questionIndex={questionIndex}
+                      value={customInputs[questionIndex] || ''}
+                      onChange={handleCustomInputChange}
+                      onSubmit={onCustomAnswerSubmit}
+                    />
+                  ) : undefined
+                }
+                endContent={
+                  onSkip ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={isCancelling || isSubmitting}
+                      onClick={event => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        onSkip();
+                      }}
+                      className="h-8 shrink-0"
+                    >
+                      {isCancelling ? CANCELLING_TEXT : 'Skip'}
+                    </Button>
+                  ) : undefined
+                }
+                onKeyDown={e => {
+                  if (e.key === ' ') {
+                    e.preventDefault();
+                    handleOtherCheckboxToggle();
+                  }
+                }}
+              >
+                <input
+                  id={`q${questionIndex}-other`}
+                  type="checkbox"
+                  checked={!!otherSelected[questionIndex]}
+                  onChange={handleOtherCheckboxToggle}
+                  className="sr-only"
+                />
+              </OptionCard>
+            </div>
           ) : (
-            <><CheckCircle className="size-4" /> Submit</>
+            <div className="divide-y" style={{ borderColor: 'var(--tool-border)' }}>
+              {question.options.map((option, optIdx) => {
+                const optionId = `q${questionIndex}-opt${optIdx}`;
+                const isSelected = selectedAnswers[questionIndex]?.[0] === option.label;
+
+                return (
+                  <OptionCard
+                    key={optIdx}
+                    id={optionId}
+                    isSelected={isSelected}
+                    label={option.label}
+                    description={option.description}
+                    optionIndex={optIdx + 1}
+                    onKeyDown={e => {
+                      if (e.key === ' ') {
+                        e.preventDefault();
+                        handleRadioChange(option.label);
+                      }
+                    }}
+                  >
+                    <input
+                      id={optionId}
+                      type="radio"
+                      name={`q${questionIndex}`}
+                      value={option.label}
+                      checked={isSelected}
+                      onChange={() => handleRadioChange(option.label)}
+                      className="sr-only"
+                    />
+                  </OptionCard>
+                );
+              })}
+
+              <OptionCard
+                id={`q${questionIndex}-other`}
+                isSelected={!!otherSelected[questionIndex]}
+                label={OTHER_OPTION_LABEL}
+                description={OTHER_OPTION_DESCRIPTION}
+                isOther
+                inlineContent={
+                  otherSelected[questionIndex] ? (
+                    <CustomAnswerInput
+                      questionIndex={questionIndex}
+                      value={customInputs[questionIndex] || ''}
+                      onChange={handleCustomInputChange}
+                      onSubmit={onCustomAnswerSubmit}
+                    />
+                  ) : undefined
+                }
+                endContent={
+                  onSkip ? (
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      disabled={isCancelling || isSubmitting}
+                      onClick={event => {
+                        event.preventDefault();
+                        event.stopPropagation();
+                        onSkip();
+                      }}
+                      className="h-8 shrink-0"
+                    >
+                      {isCancelling ? CANCELLING_TEXT : 'Skip'}
+                    </Button>
+                  ) : undefined
+                }
+                onKeyDown={e => {
+                  if (e.key === ' ') {
+                    e.preventDefault();
+                    handleRadioChange('other');
+                  }
+                }}
+              >
+                <input
+                  id={`q${questionIndex}-other`}
+                  type="radio"
+                  name={`q${questionIndex}`}
+                  value="other"
+                  checked={!!otherSelected[questionIndex]}
+                  onChange={() => handleRadioChange('other')}
+                  className="sr-only"
+                />
+              </OptionCard>
+            </div>
           )}
-        </Button>
+        </div>
       </div>
     </div>
   );

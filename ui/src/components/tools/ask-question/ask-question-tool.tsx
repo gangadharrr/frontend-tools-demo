@@ -1,10 +1,11 @@
-import { useState } from 'react';
 import { useTool } from '../../../hooks/useTool';
 import type { AskUserQuestionInput, AskUserQuestionResult, Question } from './types';
-import { QuestionForm } from './question-form';
+import { InteractiveQuestionUI } from './interactive-question-ui';
 import { CompletedAnswersUI } from './completed-answers-ui';
 import { CancelledAnswersUI } from './cancelled-answers-ui';
-import { parseQuestions } from './utils';
+import { PreparingQuestionsUI } from './preparing-questions-ui';
+import { formatResponseMessage, parseQuestions } from './utils';
+import { AskToolDisplayMessages } from './constants';
 
 const schema: Record<string, unknown> = {
   type: 'object',
@@ -15,14 +16,8 @@ const schema: Record<string, unknown> = {
       items: {
         type: 'object',
         properties: {
-          question: {
-            type: 'string',
-            description: 'The question text to ask the user',
-          },
-          header: {
-            type: 'string',
-            description: 'A brief header/title for the question',
-          },
+          question: { type: 'string', description: 'The question text to ask the user' },
+          header: { type: 'string', description: 'A brief header/title for the question' },
           options: {
             type: 'array',
             description: 'Array of predefined options for the user to choose from',
@@ -38,7 +33,8 @@ const schema: Record<string, unknown> = {
           },
           multiSelect: {
             type: 'boolean',
-            description: 'Whether the user can select multiple options (true) or just one (false)',
+            description:
+              'Whether the user can select multiple options (true) or just one (false)',
           },
         },
         required: ['question', 'header', 'options', 'multiSelect'],
@@ -49,10 +45,14 @@ const schema: Record<string, unknown> = {
   required: ['questions'],
 };
 
+/**
+ * The `ask_user_question` tool — registers three render modes against the
+ * shared tool lifecycle:
+ *   - streaming        → PreparingQuestionsUI (skeletons while args stream in)
+ *   - waitingForInput  → InteractiveQuestionUI (handles both single- and multi-question)
+ *   - responded        → CompletedAnswersUI (final Q&A or cancelled header)
+ */
 export function AskQuestionTool() {
-  const [completedResult, setCompletedResult] = useState<{ questions: Question[]; answers: Record<string, string> } | null>(null);
-  const [cancelled, setCancelled] = useState(false);
-
   useTool<AskUserQuestionInput, AskUserQuestionResult>({
     name: 'ask_user_question',
     description: `Ask the user one or more questions with predefined options. Use this when you need user input to make decisions or gather information.
@@ -60,62 +60,93 @@ export function AskQuestionTool() {
 Each question supports:
 - Single-select mode (radio buttons) or multi-select mode (checkboxes)
 - Predefined options with labels and descriptions
-- Optional "Other" option with custom text input (automatically included)`,
+- Optional "Other" option with custom text input (automatically included)
+
+Best Practices:
+- Provide clear, concise question text
+- Include descriptive headers to give context
+- Offer meaningful options that cover common scenarios
+- Use multiSelect=true when multiple answers are valid
+- Use multiSelect=false when only one answer should be selected
+- For multi-question asks, batch related questions together so the user can move through them with Previous/Next/Skip/Submit`,
     schema,
-    render: ({ args, onSubmit }) => {
-      let questions = parseQuestions(args.questions);
-      if (!questions) {
-        questions = parseQuestions(args);
-      }
+    render: {
+      // 1. STREAMING — args are arriving. Skeleton placeholders.
+      streaming: ({ args, argsRaw }) => (
+        <PreparingQuestionsUI args={args} argsRaw={argsRaw} />
+      ),
 
-      if (!questions || questions.length === 0) {
-        return <div className="p-2 text-xs text-red-500">No questions found in args</div>;
-      }
-
-      if (!questions || questions.length === 0) {
-        return null;
-      }
-
-      if (cancelled) {
-        return <CancelledAnswersUI />;
-      }
-
-      if (completedResult) {
+      // 2. WAITING FOR INPUT — full args received. Show interactive form.
+      waitingForInput: ({ args, onSubmit }) => {
+        const questions = resolveQuestions(args);
+        if (!questions) {
+          return (
+            <div className="p-2 text-xs" style={{ color: 'var(--error-text)' }}>
+              No questions found in args
+            </div>
+          );
+        }
         return (
-          <CompletedAnswersUI
-            questions={completedResult.questions}
-            answers={completedResult.answers}
+          <InteractiveQuestionUI
+            questions={questions}
+            onSubmit={(answers) =>
+              onSubmit({
+                success: true,
+                answers,
+                cancelled: false,
+              })
+            }
+            onCancel={() =>
+              onSubmit({
+                success: false,
+                answers: {},
+                cancelled: true,
+                feedback: AskToolDisplayMessages.USER_CANCELLED,
+              })
+            }
           />
         );
-      }
+      },
 
-      return (
-        <QuestionForm
-          questions={questions}
-          onSubmit={(answers) => {
-            setCompletedResult({ questions, answers });
-            onSubmit({ answers, cancelled: false });
-          }}
-          onCancel={() => {
-            setCancelled(true);
-            onSubmit({ answers: {}, cancelled: true });
-          }}
-        />
-      );
+      // 3. RESPONDED — final state. Q&A (or cancelled) shown.
+      responded: ({ args, result, outcome }) => {
+        if (outcome === 'cancelled') {
+          return <CancelledAnswersUI />;
+        }
+        const questions = resolveQuestions(args) ?? [];
+        if (questions.length === 0) return null;
+        return (
+          <CompletedAnswersUI
+            questions={questions}
+            result={result}
+            outcome={outcome}
+          />
+        );
+      },
     },
     handle: (_args, result) => {
       if (result.cancelled) {
         return {
           externalToolResponse: 'failure',
-          failureMessage: 'The user cancelled the question',
+          failureMessage: AskToolDisplayMessages.USER_CANCELLED,
         };
       }
+      // Build a human-readable summary for the agent.
+      const questions = resolveQuestions(_args) ?? [];
+      const summary = questions.length
+        ? formatResponseMessage(questions, result.answers)
+        : JSON.stringify(result.answers);
       return {
         externalToolResponse: 'success',
-        successMessage: JSON.stringify(result.answers),
+        successMessage: summary,
       };
     },
   });
 
   return null;
+}
+
+function resolveQuestions(args: AskUserQuestionInput | undefined): Question[] | null {
+  if (!args) return null;
+  return parseQuestions(args.questions) ?? parseQuestions(args as never);
 }
