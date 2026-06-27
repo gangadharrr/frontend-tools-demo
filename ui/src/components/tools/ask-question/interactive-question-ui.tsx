@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { CheckCircle2 } from 'lucide-react';
+import { CheckCircle2, MinusCircle } from 'lucide-react';
 import type { Question, QuestionFormState } from './types';
 import {
   getAnswerForQuestion,
@@ -240,7 +240,18 @@ export function InteractiveQuestionUI({
         style={{ scrollbarWidth: 'none' }}
       >
         {questions.map((question, idx) => {
-          const hasAnswer = completedQuestions.has(idx);
+          // Three indicator states:
+          //   skipped   → muted MinusCircle (matches the cancelled badge style)
+          //   answered  → green CheckCircle2
+          //   pending   → numbered bubble on user-bubble background
+          const isSkipped = skippedQuestions.has(idx);
+          const isAnswered = answeredQuestions.has(idx);
+          const indicatorTone = isAnswered
+            ? 'var(--success)'
+            : isSkipped
+              ? 'var(--muted)'
+              : 'var(--muted)';
+          const indicatorBg = isAnswered || isSkipped ? 'transparent' : 'var(--user-bubble)';
 
           return (
             <TabsTrigger
@@ -251,12 +262,11 @@ export function InteractiveQuestionUI({
             >
               <span
                 className="flex items-center justify-center size-5 rounded-full text-[10px] font-semibold transition-colors"
-                style={{
-                  color: hasAnswer ? 'var(--success)' : 'var(--muted)',
-                  backgroundColor: hasAnswer ? 'transparent' : 'var(--user-bubble)',
-                }}
+                style={{ color: indicatorTone, backgroundColor: indicatorBg }}
               >
-                {hasAnswer ? (
+                {isSkipped ? (
+                  <MinusCircle className="size-3" style={{ color: 'var(--muted)' }} />
+                ) : isAnswered ? (
                   <CheckCircle2 className="size-3" style={{ color: 'var(--success)' }} />
                 ) : (
                   idx + 1
