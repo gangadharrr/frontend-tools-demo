@@ -26,8 +26,8 @@ function assistantMsg(content: string): AssistantMessage {
   return { kind: 'assistant', id: uid(), content, timestamp: new Date() };
 }
 
-function toolCallEntry(name: string): ToolCallEntry {
-  return { kind: 'tool_call', id: uid(), name, args: null, status: 'running', timestamp: new Date() };
+function toolCallEntry(name: string, index?: number): ToolCallEntry {
+  return { kind: 'tool_call', id: uid(), name, index, args: null, status: 'running', timestamp: new Date() };
 }
 
 function uiToolStreamingEntry(
@@ -137,17 +137,6 @@ function findUIToolCallByToolId(arr: ConversationEntry[], toolId: string): UIToo
   return undefined;
 }
 
-function findUIToolCallByToolCallId(
-  arr: ConversationEntry[],
-  toolCallId: string,
-): UIToolCallEntry | undefined {
-  for (let i = arr.length - 1; i >= 0; i--) {
-    const entry = arr[i];
-    if (entry.kind === 'ui_tool_call' && entry.toolCallId === toolCallId) return entry;
-  }
-  return undefined;
-}
-
 function findStreamingUIToolCall(arr: ConversationEntry[], name: string): UIToolCallEntry | undefined {
   for (let i = arr.length - 1; i >= 0; i--) {
     const entry = arr[i];
@@ -197,12 +186,6 @@ export function useChat(options: UseChatOptions = {}) {
     const abortController = new AbortController();
     abortRef.current = abortController;
 
-    // Backend tool args accumulator (for non-frontend tools)
-    const toolArgsMap = new Map<string, string>();
-    const toolIndexMap = new Map<number, ToolCallEntry>();
-    // Frontend tool streaming accumulator — keyed by toolCallId (backend chunk id)
-    const uiToolRawByCallId = new Map<string, string>();
-
     const frontendTools = getToolMetadata?.();
 
     try {
@@ -247,39 +230,57 @@ export function useChat(options: UseChatOptions = {}) {
 
                 // AUTO-DETECT: if this name is a registered frontend tool, route to UI pipeline.
                 if (isFrontendTool(name)) {
-                  const accumulated = (uiToolRawByCallId.get(chunkId) ?? '') + (chunk.args ?? '');
-                  uiToolRawByCallId.set(chunkId, accumulated);
-                  const parsed = parseArgs(accumulated) ?? {};
-
-                  let entry = findUIToolCallByToolCallId(updated, chunkId);
-                  if (!entry) {
+                  const existingIdx = updated.findIndex(
+                    (e): e is UIToolCallEntry =>
+                      e.kind === 'ui_tool_call' && e.toolCallId === chunkId,
+                  );
+                  if (existingIdx === -1) {
                     // First chunk for this frontend tool call — create streaming entry.
-                    entry = uiToolStreamingEntry(name, chunkId, parsed, accumulated);
+                    const initialRaw = chunk.args ?? '';
+                    const initialParsed = parseArgs(initialRaw) ?? {};
+                    const entry = uiToolStreamingEntry(name, chunkId, initialParsed, initialRaw);
                     updated.push(entry);
                   } else {
-                    entry.args = parsed;
-                    entry.argsRaw = accumulated;
+                    // Append to existing entry's argsRaw.
+                    const existing = updated[existingIdx] as UIToolCallEntry;
+                    const accumulated = (existing.argsRaw ?? '') + (chunk.args ?? '');
+                    const parsed = parseArgs(accumulated) ?? {};
+                    updated[existingIdx] = { ...existing, args: parsed, argsRaw: accumulated };
                   }
                   continue;
                 }
 
-                // Backend tool path (unchanged).
-                if (!toolIndexMap.has(idx)) {
-                  const entry = toolCallEntry(name);
-                  toolIndexMap.set(idx, entry);
-                  updated.push(entry);
-                }
+                // Backend tool path — look up by chunk index in `updated`.
+                const existingIdx = updated.findIndex(
+                  (e): e is ToolCallEntry =>
+                    e.kind === 'tool_call' && e.index === idx,
+                );
 
                 if (chunk.args) {
-                  const accumulated = (toolArgsMap.get(`i:${idx}`) ?? '') + chunk.args;
-                  toolArgsMap.set(`i:${idx}`, accumulated);
-
-                  const entry = toolIndexMap.get(idx);
-                  if (entry) {
-                    entry.argsRaw = accumulated;
+                  const newRaw = chunk.args;
+                  if (existingIdx === -1) {
+                    // First chunk for this backend tool call — create entry.
+                    const accumulated = newRaw;
                     const parsed = parseArgs(accumulated);
-                    if (parsed) entry.args = parsed;
+                    updated.push({
+                      ...toolCallEntry(name, idx),
+                      argsRaw: accumulated,
+                      args: parsed,
+                    });
+                  } else {
+                    // Append to existing entry's argsRaw.
+                    const existing = updated[existingIdx] as ToolCallEntry;
+                    const accumulated = (existing.argsRaw ?? '') + newRaw;
+                    const parsed = parseArgs(accumulated);
+                    updated[existingIdx] = {
+                      ...existing,
+                      argsRaw: accumulated,
+                      args: parsed ?? existing.args,
+                    };
                   }
+                } else if (existingIdx === -1) {
+                  // No args in this chunk but we still need an entry to track the call.
+                  updated.push(toolCallEntry(name, idx));
                 }
               }
               return updated;
@@ -309,8 +310,11 @@ export function useChat(options: UseChatOptions = {}) {
             }
             const lastTool = findLastToolCall(updated);
             if (lastTool) {
-              lastTool.status = 'complete';
-              if (toolMessage) lastTool.result = toolMessage;
+              updated[updated.indexOf(lastTool)] = {
+                ...lastTool,
+                status: 'complete',
+                result: toolMessage || lastTool.result,
+              };
             }
             return updated;
           });

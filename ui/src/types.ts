@@ -31,6 +31,7 @@ export interface ToolCallEntry {
   kind: 'tool_call';
   id: string;
   name: string;
+  index?: number;
   args: Record<string, unknown> | null;
   argsRaw?: string;
   status: 'running' | 'complete' | 'rejected';
