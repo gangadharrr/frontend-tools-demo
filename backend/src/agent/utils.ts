@@ -118,6 +118,33 @@ export async function* streamAgent(
     configurable: { thread_id: threadId },
   });
 
+  const toolCallIndexMap = new Map<number, { id?: string; name?: string }>();
+
+  /**
+   * Enrich a raw tool-call chunk with the id/name captured for its index.
+   * Always returns a chunk with a defined `index` and best-effort `id`/`name`.
+   */
+  const enrichToolCallChunk = (chunk: {
+    name?: string;
+    args?: string;
+    id?: string;
+    index?: number;
+    type?: string;
+  }) => {
+    const idx = chunk.index ?? 0;
+    const existing = toolCallIndexMap.get(idx) ?? {};
+    const id = chunk.id ?? existing.id;
+    const name = chunk.name ?? existing.name;
+
+    // Update the map whenever this chunk introduces new metadata so future
+    // chunks for the same index inherit it.
+    if (chunk.id || chunk.name) {
+      toolCallIndexMap.set(idx, { id, name });
+    }
+
+    return { ...chunk, id, name, index: idx };
+  };
+
   yield {
     eventType: EventType.RUN_STARTED,
     eventData: { threadId },
@@ -145,7 +172,7 @@ export async function* streamAgent(
           eventType = EventType.TOOL_CALL_ARGS;
           eventData = {
             aiMessage: extractTextFromContentBlocks(message.contentBlocks),
-            toolCallChunks: message.tool_call_chunks,
+            toolCallChunks: message.tool_call_chunks.map(enrichToolCallChunk),
           };
         } else {
           eventType = EventType.TEXT_MESSAGE_CONTENT;

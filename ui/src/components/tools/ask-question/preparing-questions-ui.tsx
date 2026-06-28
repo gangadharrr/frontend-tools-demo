@@ -14,48 +14,23 @@ const PLACEHOLDER_OPTION_COUNT = 3;
 
 /**
  * Streaming-state UI for `ask_user_question`.
- *
- * Renders one skeleton card per question. If the partial args already parse
- * into recognizable questions, we surface their headers + question text; any
- * missing questions are filled with a generic skeleton. A small loader badge
- * indicates preparation is still in progress.
  */
-export function PreparingQuestionsUI({ args, argsRaw }: PreparingQuestionsUIProps) {
+export function PreparingQuestionsUI({ args }: PreparingQuestionsUIProps) {
   const parsed = parseQuestions(args.questions as never) ?? [];
-  const expectedCount = inferExpectedCount(argsRaw, parsed.length);
-  const knownCount = parsed.length;
+  const hint = parsed[0];
 
   return (
     <div className="space-y-2">
       <div className="flex items-center gap-2 text-xs" style={{ color: 'var(--muted)' }}>
         <Spinner size="sm" tone="muted" label="Preparing questions" />
-        <span>
-          {knownCount > 0
-            ? `Preparing question${expectedCount > 1 ? 's' : ''}…`
-            : 'Preparing questions…'}
-        </span>
+        <span>Preparing questions…</span>
       </div>
 
       <div className="space-y-1.5">
-        {Array.from({ length: expectedCount }).map((_, i) => (
-          <SkeletonQuestion key={i} hint={parsed[i]} />
-        ))}
+        <SkeletonQuestion hint={hint} />
       </div>
     </div>
   );
-}
-
-/**
- * Try to infer the eventual question count from the partial raw JSON,
- * falling back to the count of questions already parsed (or 1 if neither).
- */
-function inferExpectedCount(argsRaw: string | undefined, parsedCount: number): number {
-  if (!argsRaw) return Math.max(parsedCount, 1);
-
-  // Count array-element starts in the raw partial JSON.
-  const matches = argsRaw.match(/"question"\s*:/g);
-  if (matches && matches.length >= parsedCount) return matches.length;
-  return Math.max(parsedCount, 1);
 }
 
 function SkeletonQuestion({
