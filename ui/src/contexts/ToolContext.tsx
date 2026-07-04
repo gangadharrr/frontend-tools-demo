@@ -1,4 +1,5 @@
 import { createContext, useContext, useRef, useCallback, type ReactNode } from 'react';
+import { z } from 'zod';
 import type { ToolDefinition, ToolMetadata } from '../types';
 
 interface ToolContextValue {
@@ -28,7 +29,10 @@ export function ToolProvider({ children }: { children: ReactNode }) {
   const getToolMetadata = useCallback(() => {
     const metadata: ToolMetadata[] = [];
     toolsRef.current.forEach((tool) => {
-      metadata.push({ name: tool.name, description: tool.description, schema: tool.schema });
+      const schema = z.toJSONSchema(tool.schema, {
+        target: 'openApi3',
+      }) as Record<string, unknown>;
+      metadata.push({ name: tool.name, description: tool.description, schema });
     });
     return metadata;
   }, []);

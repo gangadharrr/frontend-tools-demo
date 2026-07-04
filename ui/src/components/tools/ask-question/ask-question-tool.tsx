@@ -1,4 +1,5 @@
 import { useTool } from '../../../hooks/useTool';
+import { z } from 'zod';
 import type { AskUserQuestionInput, AskUserQuestionResult, Question } from './types';
 import { InteractiveQuestionUI } from './interactive-question-ui';
 import { CompletedAnswersUI, CancelledHeader, RejectedAnswersUI } from './completed-answers-ui';
@@ -6,43 +7,31 @@ import { PreparingQuestionsUI } from './preparing-questions-ui';
 import { formatResponseMessage, parseQuestions } from './utils';
 import { AskToolDisplayMessages } from './constants';
 
-const schema: Record<string, unknown> = {
-  type: 'object',
-  properties: {
-    questions: {
-      type: 'array',
-      description: 'Array of questions to ask the user',
-      items: {
-        type: 'object',
-        properties: {
-          question: { type: 'string', description: 'The question text to ask the user' },
-          header: { type: 'string', description: 'A brief header/title for the question' },
-          options: {
-            type: 'array',
-            description: 'Array of predefined options for the user to choose from',
-            items: {
-              type: 'object',
-              properties: {
-                label: { type: 'string', description: 'The option label' },
-                description: { type: 'string', description: 'Description of the option' },
-              },
-              required: ['label', 'description'],
-            },
-            minItems: 1,
-          },
-          multiSelect: {
-            type: 'boolean',
-            description:
-              'Whether the user can select multiple options (true) or just one (false)',
-          },
-        },
-        required: ['question', 'header', 'options', 'multiSelect'],
-      },
-      minItems: 1,
-    },
-  },
-  required: ['questions'],
-};
+const schema = z.object({
+  questions: z
+    .array(
+      z.object({
+        question: z.string().describe('The question text to ask the user'),
+        header: z.string().describe('A brief header/title for the question'),
+        options: z
+          .array(
+            z.object({
+              label: z.string().describe('The option label'),
+              description: z.string().describe('Description of the option'),
+            }),
+          )
+          .min(1)
+          .describe('Array of predefined options for the user to choose from'),
+        multiSelect: z
+          .boolean()
+          .describe(
+            'Whether the user can select multiple options (true) or just one (false)',
+          ),
+      }),
+    )
+    .min(1)
+    .describe('Array of questions to ask the user'),
+});
 
 /**
  * The `ask_user_question` tool — registers three render modes against the

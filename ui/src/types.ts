@@ -1,3 +1,4 @@
+import { z } from 'zod';
 export interface ToolCallChunk {
   name?: string;
   args?: string;
@@ -153,10 +154,10 @@ export interface ToolRenderers<TInput = Record<string, unknown>, TOutput = Recor
   rejected?: ToolRejectedRenderer<TInput>;
 }
 
-export interface ToolDefinition<TInput = Record<string, unknown>, TOutput = Record<string, unknown>> {
+export interface ToolDefinition<TInput = unknown, TOutput = unknown> {
   name: string;
   description: string;
-  schema: Record<string, unknown>;
+  schema:  z.ZodSchema<TInput>;
   render: ToolRenderers<TInput, TOutput>;
   /** Maps (args, user output) to the backend `commandResponse` payload. */
   handle: (args: TInput, result: TOutput) => Record<string, unknown>;
