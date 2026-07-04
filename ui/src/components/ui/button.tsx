@@ -18,6 +18,9 @@ const buttonVariants = cva(
       size: {
         sm: 'h-8 px-3 text-xs',
         md: 'h-9 px-4 text-sm',
+        // `default` mirrors `md` but is exposed so Dice UI's color-picker can
+        // use its native API (`size="default"`) without translation.
+        default: 'h-9 px-4 text-sm',
         icon: 'h-9 w-9',
       },
     },

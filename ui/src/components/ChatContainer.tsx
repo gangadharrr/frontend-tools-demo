@@ -5,6 +5,7 @@ import { MessageList } from './MessageList';
 import { ChatInput } from './ChatInput';
 import { useToolContext } from '../contexts/ToolContext';
 import { AskQuestionTool } from './tools/ask-question/ask-question-tool';
+import { RequestColorTool } from './tools/color-picker/request-color-tool';
 import type { UIToolCallEntry } from '../types';
 import z from 'zod';
 import { useTool } from '../hooks/useTool';
@@ -90,6 +91,7 @@ export function ChatContainer() {
     <div className="flex h-screen flex-col bg-[var(--page)]">
       {/* Tool self-registration side effects. */}
       <AskQuestionTool />
+      <RequestColorTool />
 
       <header className="shrink-0 border-b border-[var(--border)] bg-[var(--page)]">
         <div className="mx-auto flex h-12 max-w-3xl items-center px-4" />

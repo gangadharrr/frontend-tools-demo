@@ -14,6 +14,7 @@ const spinnerVariants = cva('animate-spin shrink-0', {
     tone: {
       primary: 'text-[var(--primary)]',
       muted: 'text-[var(--muted)]',
+      inverse: 'text-[var(--inverse-text)]',
       inherit: 'text-current',
     },
   },
