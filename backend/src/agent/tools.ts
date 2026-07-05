@@ -37,6 +37,6 @@ export class UIProxyTool extends BaseLangChainTool {
         this.schema = createZodSchema(schema);
     }
     async _call(args: unknown): Promise<ContentAndArtifact | string> {
-        return Promise.resolve("This is a placeholder result from the UIProxyTool.");
+        return "This is a placeholder result from the UIProxyTool.";
     }
 }
